@@ -1,6 +1,37 @@
 [package]
 name = "mvp_engine"
 version = "0.1.0"
-authors = ["AlphaModder <quasiflux@gmail.com>"]
+authors = ["AlphaModder"]
+
+[features]
+default = ["vulkan"]
+metal = ["gfx-backend-metal"]
+gl = ["gfx-backend-gl"]
+dx12 = ["gfx-backend-dx12"]
+vulkan = ["gfx-backend-vulkan"]
 
 [dependencies]
+gfx-hal = { git = "https://github.com/gfx-rs/gfx", branch = "master" }
+log = "0.3"
+winit = "0.7"
+image = "0.15"
+
+[dependencies.gfx-backend-gl]
+git = "https://github.com/gfx-rs/gfx" 
+branch = "master"
+optional = true
+
+[dependencies.gfx-backend-vulkan]
+git = "https://github.com/gfx-rs/gfx" 
+branch = "master"
+optional = true
+
+[target.'cfg(target_os = "macos")'.dependencies.gfx-backend-metal]
+git = "https://github.com/gfx-rs/gfx" 
+branch = "master"
+optional = true
+
+[target.'cfg(windows)'.dependencies.gfx-backend-dx12]
+git = "https://github.com/gfx-rs/gfx" 
+branch = "master"
+optional = true
