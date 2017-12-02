@@ -1,0 +1,6 @@
+[package]
+name = "mvp_engine"
+version = "0.1.0"
+authors = ["AlphaModder <quasiflux@gmail.com>"]
+
+[dependencies]
