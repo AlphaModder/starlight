@@ -4,17 +4,32 @@ extern crate winit;
 
 #[macro_use]
 mod macros {
+    // doesn't support enums with lifetime parameters because you can't do that
+    // also for stupid reasons the final :: has to be a :
     macro_rules! variant_derive_from {
-        ($enum:ty:$variant:ident($from:ty)) => {
-            impl From<$from> for $enum {
-                fn from(thing: $from) -> $enum { $enum::$variant(thing) }
+        ($($enum_path:ident)::+:$variant:ident($from:ty)) => {
+            impl From<$from> for $($enum_path)::+ {
+                fn from(thing: $from) -> $($enum_path)::+ { $($enum_path::)+$variant(thing) }
             }
         };
-        ($enum:ty:$variant:ident($from0:ty, $($from:ty),*)) => {
-            impl From<($from0, $($from, )*)> for $enum {
-                fn from(thing: ($from0, $($from)*)) -> $enum { 
-                    let ($from0, $($from)*) = thing;
-                    $enum::$variant($from0, $($from)*)
+        ($($enum_path:ident)::+<$($param:ident),+>:$variant:ident($from:ty)) => {
+            impl From<$from> for $($enum_path::)+<$($param),+> {
+                fn from(thing: $from) -> $($enum_path::)+<$($param),+> { $($enum_path::)+<$($param),+>::$variant(thing) }
+            }
+        };
+        ($($enum_path:ident)::+:$variant:ident($($from:ty),+)) => {
+            impl From<($($from),+)> for $($enum_path)::+ {
+                fn from(thing: ($($from),+)) -> $($enum_path)::+ { 
+                    let ($($from),+) = thing;
+                    $($enum_path::)+$variant($($from),+)
+                }
+            }
+        };
+        ($($enum_path:ident)::+<$($param:ident),+>:$variant:ident($($from:ty),+)) => {
+            impl From<($($from, )+)> for $($enum_path::)+<$($param),+> {
+                fn from(thing: ($($from),+)) -> $($enum_path::)+<$($param),+> { 
+                    let ($($from),+) = thing;
+                    $($enum_path::)*<$($param),+>::variant($($from),+)
                 }
             }
         };
@@ -50,8 +65,4 @@ pub enum EngineInitError {
     Graphics(graphics::GraphicsInitError)
 }
 
-// variant_derive_from!(EngineInitError:Graphics(graphics::GraphicsInitError));
-
-impl From < graphics::GraphicsInitError > for EngineInitError {
-           fn from ( thing : graphics::GraphicsInitError ) -> EngineInitError {
-           return EngineInitError :: Graphics ( thing ) } }
+variant_derive_from!(EngineInitError:Graphics(graphics::GraphicsInitError));

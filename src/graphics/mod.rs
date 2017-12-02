@@ -114,8 +114,6 @@ pub enum GraphicsInitError {
     NoCompatibleSurfaceFormat,
 }
 
-// variant_derive_from!(GraphicsInitError:WindowCreationFailed(winit::CreationError));
+variant_derive_from!(GraphicsInitError:WindowCreationFailed(winit::CreationError));
 
-impl From < winit::CreationError > for GraphicsInitError {
-            fn from ( thing : winit::CreationError ) -> GraphicsInitError {
-            GraphicsInitError :: WindowCreationFailed ( thing ) } }
+  
