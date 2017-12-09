@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["AlphaModder"]
 
 [features]
-default = ["vulkan"]
+default = ["vulkan", "gl", "dx12"]
 metal = ["gfx-backend-metal"]
 gl = ["gfx-backend-gl"]
 dx12 = ["gfx-backend-dx12"]

@@ -1,56 +1,20 @@
 #[macro_use]
 extern crate log;
+extern crate gfx_hal;
 extern crate winit;
-
-#[macro_use]
-mod macros {
-    // doesn't support enums with lifetime parameters because you can't do that
-    // also for stupid reasons the final :: has to be a :
-    macro_rules! variant_derive_from {
-        ($($enum_path:ident)::+:$variant:ident($from:ty)) => {
-            impl From<$from> for $($enum_path)::+ {
-                fn from(thing: $from) -> $($enum_path)::+ { $($enum_path::)+$variant(thing) }
-            }
-        };
-        ($($enum_path:ident)::+<$($param:ident),+>:$variant:ident($from:ty)) => {
-            impl From<$from> for $($enum_path::)+<$($param),+> {
-                fn from(thing: $from) -> $($enum_path::)+<$($param),+> { $($enum_path::)+<$($param),+>::$variant(thing) }
-            }
-        };
-        ($($enum_path:ident)::+:$variant:ident($($from:ty),+)) => {
-            impl From<($($from),+)> for $($enum_path)::+ {
-                fn from(thing: ($($from),+)) -> $($enum_path)::+ { 
-                    let ($($from),+) = thing;
-                    $($enum_path::)+$variant($($from),+)
-                }
-            }
-        };
-        ($($enum_path:ident)::+<$($param:ident),+>:$variant:ident($($from:ty),+)) => {
-            impl From<($($from, )+)> for $($enum_path::)+<$($param),+> {
-                fn from(thing: ($($from),+)) -> $($enum_path::)+<$($param),+> { 
-                    let ($($from),+) = thing;
-                    $($enum_path::)*<$($param),+>::variant($($from),+)
-                }
-            }
-        };
-    }
-}
 
 pub mod graphics;
 
-pub struct Engine {
-    graphics: graphics::Graphics,
+pub struct Engine<G: graphics::backend::Backend> {
+    graphics: graphics::Graphics<G>,
 }
 
-impl Engine {
+impl<G: graphics::backend::Backend> Engine<G> {
     
-    pub fn new(window_builder: winit::WindowBuilder) -> Result<Engine, EngineInitError> {
+    pub fn new(window_builder: winit::WindowBuilder) -> Result<Engine<G>, EngineInitError<G>> {
         info!("MVP Engine init started.");
-        use graphics::Graphics;
-        let graphics = Graphics::new(window_builder)?;
-
         Ok(Engine { 
-            graphics: graphics,
+            graphics: graphics::Graphics::<G>::new(window_builder)?,
         })
     }
 
@@ -61,8 +25,12 @@ impl Engine {
 }
 
 #[derive(Debug)]
-pub enum EngineInitError {
-    Graphics(graphics::GraphicsInitError)
+pub enum EngineInitError<G: graphics::backend::Backend> {
+    Graphics(graphics::GraphicsInitError<G>)
 }
 
-variant_derive_from!(EngineInitError:Graphics(graphics::GraphicsInitError));
+impl<G: graphics::backend::Backend> From<graphics::GraphicsInitError<G>> for EngineInitError<G> {
+    fn from(graphics: graphics::GraphicsInitError<G>) -> EngineInitError<G> {
+        EngineInitError::Graphics(graphics)
+    }
+}
