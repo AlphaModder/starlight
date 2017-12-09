@@ -1,8 +1,8 @@
-#[cfg(feature = "dx12")]
+#[cfg(all(feature = "dx12", target_os = "windows"))]
 extern crate gfx_backend_dx12;
 #[cfg(feature = "vulkan")]
 extern crate gfx_backend_vulkan;
-#[cfg(feature = "metal")]
+#[cfg(all(feature = "metal", target_os = "macos"))]
 extern crate gfx_backend_metal;
 #[cfg(feature = "gl")]
 extern crate gfx_backend_gl;
@@ -54,13 +54,13 @@ macro_rules! impl_nongl_backend {
     }
 }
 
-#[cfg(feature = "dx12")]
+#[cfg(all(feature = "dx12", target_os = "windows"))]
 impl_nongl_backend!(DX12: gfx_backend_dx12);
 
 #[cfg(feature = "vulkan")]
 impl_nongl_backend!(Vulkan: gfx_backend_vulkan);
 
-#[cfg(feature = "metal")]
+#[cfg(all(feature = "metal", target_os = "macos"))]
 impl_nongl_backend!(Metal: gfx_backend_metal);
 
 #[cfg(feature = "gl")]
