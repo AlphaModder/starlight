@@ -1,6 +1,6 @@
 [package]
-name = "mvp_engine"
-version = "0.1.0"
+name = "starlight"
+version = "0.0.1"
 authors = ["AlphaModder"]
 
 [features]

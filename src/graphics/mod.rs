@@ -22,7 +22,7 @@ impl<B: Backend> Graphics<B> {
     pub(crate) fn new(window_builder: winit::WindowBuilder) -> Result<Graphics<B>, GraphicsInitError<B>> {
         info!("Initializing graphics subsystem...");
         let mut events = winit::EventsLoop::new();
-        let mut backend = B::init("mvp engine", 1, window_builder, &events);
+        let mut backend = B::init("Starlight", 1, window_builder, &events);
         let mut backend = {
             match backend {
                 Ok(b) => b,

@@ -12,7 +12,7 @@ pub struct Engine<G: graphics::backend::Backend> {
 impl<G: graphics::backend::Backend> Engine<G> {
     
     pub fn new(window_builder: winit::WindowBuilder) -> Result<Engine<G>, EngineInitError<G>> {
-        info!("MVP Engine init started.");
+        info!("Starlight init started.");
         Ok(Engine { 
             graphics: graphics::Graphics::<G>::new(window_builder)?,
         })
