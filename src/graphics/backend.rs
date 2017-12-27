@@ -14,7 +14,6 @@ use gfx_hal::format;
 use gfx_hal::format::Formatted;
 use winit;
 
-
 pub trait Backend: Sized {
     type WindowError: Debug;
     type GfxBackend: gfx_hal::Backend;

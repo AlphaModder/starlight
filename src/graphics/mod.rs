@@ -4,9 +4,7 @@ use gfx_hal::{format, window};
 use gfx_hal::{Device, Gpu, Adapter, Instance, QueueFamily, Surface};
 use graphics::backend::Backend;
 
-pub mod graph;
-pub mod command;
-pub mod resource;
+pub mod frame;
 pub mod backend;
 
 pub struct Graphics<B: Backend> {

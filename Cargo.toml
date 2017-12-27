@@ -15,6 +15,7 @@ gfx-hal = { git = "https://github.com/gfx-rs/gfx", branch = "master" }
 log = "0.3"
 winit = "0.7"
 image = "0.15"
+petgraph = "0.4.10"
 
 [dependencies.gfx-backend-gl]
 git = "https://github.com/gfx-rs/gfx" 
