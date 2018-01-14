@@ -3,6 +3,7 @@ extern crate log;
 extern crate gfx_hal;
 extern crate winit;
 extern crate petgraph;
+extern crate typemap;
 
 pub mod graphics;
 

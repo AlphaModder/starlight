@@ -1,62 +1,33 @@
-mod resource;
-mod resource2;
+use typemap;
+use gfx_hal::{buffer, image, format};
+use gfx_hal::Backend;
+
+mod graph;
 mod pass;
 
-use gfx_hal::{Backend};
-use std::collections::HashMap;
-use petgraph::Graph;
+mod traits {
+    use gfx_hal::queue::QueueType;
+    use gfx_hal::queue::QueueType::*;
+    pub trait QueueTypeExt {
+        fn is_subtype(&self, q: &QueueType) -> bool;
+    }
 
-pub use self::resource::*;
+    impl QueueTypeExt for QueueType {
+        fn is_subtype(&self, q: &QueueType) -> bool {
+            match (*self, *q) {
+                (General, General) => false,
+                (General, _) => true,
+                (Graphics, Transfer) | (Compute, Transfer) => true,
+                _ => false,
+            }
+        }
+    }
+}
+
+use self::traits::*;
 pub use self::pass::*;
+pub use self::graph::*;
 
-struct FrameResources {
-    buffers: Vec<BufferResource>,
-    images: Vec<ImageResource>,
-}
-
-pub struct Frame<'f, B: Backend> {
-    render_passes: Vec<Box<RenderPass<B> + 'f>>,
-    resources: FrameResources,
-}
-
-impl<'f, B: Backend> Frame<'f, B> {
-
-    pub fn add_pass<'d, D: RenderPassDef<'d, B>>(&'d mut self, def: D) -> D::Output {
-        let mut builder = PassBuilder::new(self.render_passes.len(), &mut self.resources);
-        let (output, pass) = def.setup_pass(&mut builder);
-        self.render_passes.push(pass);
-        output
-    }
-
-    fn render<'d>(&self, context: &RenderContext<'d, B>) {
-        let pass_order = petgraph::algo::toposort(self.construct_graph(), None).unwrap();
-    }
-
-    fn order_passes(&self) {
-        
-    }
-
-    fn construct_graph<'d>(&self) -> Graph<usize, ()> {
-        let mut graph = Graph::new();
-        for i in 0..self.render_passes.len() { graph.add_node(i); };
-        for buffer in self.resources.buffers {
-            if let Some(ResourceCreator::Pass(p)) = buffer.creator {
-                for reader in buffer.readers {
-                    graph.add_edge(p, reader, ());
-                }
-            }
-        }
-        for image in self.resources.images {
-            if let Some(ResourceCreator::Pass(p)) = image.creator {
-                for reader in image.readers {
-                    graph.add_edge(p, reader, ());
-                }
-            }
-        }
-        graph
-    }
-    
-}
 
 /*
 pub struct PassBuilder<'r> {
@@ -81,7 +52,7 @@ impl<'r> PassBuilder<'r> {
 
     pub fn create_buffer(&mut self, name: &str, info: BufferInfo) -> BufferRef {
         let reference = BufferRef(self.resources.buffers.len());
-        self.resources.buffers.push(BufferResource::new(name, info));
+        self.resources.buffers.push(BufferResourceData::new(name, info));
         self.buffer_outputs.push(reference.clone());
         reference
     }
@@ -98,7 +69,7 @@ impl<'r> PassBuilder<'r> {
 
     pub fn create_image(&mut self, name: &str, info: ImageInfo) -> ImageRef {
         let reference = ImageRef(self.resources.images.len());
-        self.resources.images.push(ImageResource::new(name, info));
+        self.resources.images.push(ImageResourceData::new(name, info));
         self.image_outputs.push(reference.clone());
         reference
     }
@@ -125,73 +96,58 @@ impl<'r> PassBuilder<'r> {
 }
 */
 
-pub struct PassBuilder<'r> {
-    pass: usize,
-    resources: &'r mut FrameResources,
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct BufferInfo {
+    size: u64,
+    stride: u64,
+    usage: buffer::Usage,
 }
 
-impl<'r> PassBuilder<'r> {
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct ImageInfo {
+    kind: image::Kind,
+    level: image::Level,
+    format: format::Format,
+    usage: image::Usage,
+}
 
-    fn new(pass: usize, resources: &'r mut FrameResources) -> PassBuilder<'r> {
-        PassBuilder {
-            pass: pass,
-            resources: resources,
-        }
-    }
+/*
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub struct ImageViewInfo {
+    image: ImageInfo,
+    format: format::Format,
+    swizzle: format::Swizzle,
+    // subresource_range: image::SubresourceRange,
+}
+*/
 
-    pub fn create_buffer(&mut self, name: &str, info: BufferInfo) -> BufferRef {
-        self.resources.buffers.push(BufferResource {
-            info: info,
-            readers: Vec::new(),
-            data: ResourceData {
-                name: name.to_string(),
-                creator: Some(ResourceCreator::Pass(self.pass)),
-                consumer: None,
-            }
-        });
-        BufferRef(self.resources.buffers.len() - 1)
-    }
-
-    pub fn read_buffer(&mut self, buffer: &BufferRef) {
-        self.resources.buffers[buffer.0].readers.push(self.pass);
-    }
-
-    pub fn write_buffer(&mut self, mut buffer: BufferRef, new_name: &str) -> BufferRef {
-        self.read_buffer(&buffer);
-        self.resources.buffers[buffer.0].data.consumer = Some(ResourceConsumer::Pass(self.pass));
-        let info = self.resources.buffers[buffer.0].info;
-        self.create_buffer(new_name, info)
-    }
-
-    pub fn create_image(&mut self, name: &str, info: ImageInfo) -> ImageRef {
-        self.resources.images.push(ImageResource {
-            info: info,
-            readers: HashMap::new(),
-            data: ResourceData {
-                name: name.to_string(),
-                creator: Some(ResourceCreator::Pass(self.pass)),
-                consumer: None,
-            }
-        });
-        ImageRef(self.resources.images.len() - 1)
-    }
-
-    pub fn read_image(&mut self, image: &ImageRef, layout: ImageLayout) {
-        self.resources.images[image.0].readers.insert(self.pass, layout);
-    }
-
-    pub fn write_image(&mut self, mut image: ImageRef, layout: ImageLayout, new_name: &str) -> ImageRef {
-        self.read_image(&image, layout);
-        self.resources.images[image.0].data.consumer = Some(ResourceConsumer::Pass(self.pass));
-        let info = self.resources.images[image.0].info;
-        self.create_image(new_name, info)
-    }
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+pub enum ImageLayout {
+    Color,
+    Resolve,
+    DepthStencil,
+    Texture,
 }
 
 pub struct RenderContext<'d, B: Backend> {
     device: &'d B::Device,
+    queues: typemap::TypeMap,
+}
+
+/*
+struct Capability<'a, B: Backend, C: queue::Capability + 'a>(PhantomData<&'a (B, C)>);
+impl<'a, B: Backend, C: queue::Capability> typemap::Key for Capability<'a, B, C> {
+    type Value = Vec<&'a mut queue::CommandQueue<B, C>>;
 }
 
 impl<'d, B: Backend> RenderContext<'d, B> {
-    
+    pub(crate) fn acquire_queue<C: queue::Capability>(&mut self) -> Option<&mut queue::CommandQueue<B, C>> {
+        let queues = match self.queues.get_mut::<Capability<'d, B, C>>() {
+            Some(q) => q,
+            None => return None,
+        };
+        unimplemented!()
+    }
 }
+*/
+
