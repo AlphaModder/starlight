@@ -1,39 +1,6 @@
-[package]
-name = "starlight"
-version = "0.0.1"
-authors = ["AlphaModder"]
+[workspace]
 
-[features]
-default = ["vulkan", "gl", "dx12", "metal"]
-metal = ["gfx-backend-metal"]
-gl = ["gfx-backend-gl"]
-dx12 = ["gfx-backend-dx12"]
-vulkan = ["gfx-backend-vulkan"]
-
-[dependencies]
-gfx-hal = { git = "https://github.com/gfx-rs/gfx", branch = "master" }
-log = "0.3"
-winit = "0.7"
-image = "0.15"
-petgraph = "0.4.10"
-typemap = "0.3.3"
-
-[dependencies.gfx-backend-gl]
-git = "https://github.com/gfx-rs/gfx" 
-branch = "master"
-optional = true
-
-[dependencies.gfx-backend-vulkan]
-git = "https://github.com/gfx-rs/gfx" 
-branch = "master"
-optional = true
-
-[target.'cfg(target_os = "macos")'.dependencies.gfx-backend-metal]
-git = "https://github.com/gfx-rs/gfx" 
-branch = "master"
-optional = true
-
-[target.'cfg(windows)'.dependencies.gfx-backend-dx12]
-git = "https://github.com/gfx-rs/gfx" 
-branch = "master"
-optional = true
+members = [
+    "starlight",
+    "starlight-example",
+]

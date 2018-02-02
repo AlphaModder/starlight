@@ -1,28 +1,20 @@
-use super::{
-    BufferInfo, ImageInfo, ImageLayout, RenderPass, RenderPassDef, Backend
-};
+use super::*;
 
-use petgraph;
 use petgraph::Graph;
 use std::ops::{Index, IndexMut};
 
-#[derive(Copy, Clone)]
-struct PassRef(petgraph::graph::NodeIndex);
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
+pub struct PassRef(pub ::petgraph::graph::NodeIndex);
 
-struct ResourceLifetime {
-    creator: PassRef,
-    consumer: Option<PassRef>,
-}
-
-struct BufferResource {
+pub struct BufferResource {
     info: BufferInfo,
-    lifetime: ResourceLifetime,
+    creator: PassRef,
     name: String,
 }
 
-struct ImageResource {
+pub struct ImageResource {
     info: ImageInfo,
-    lifetime: ResourceLifetime,
+    creator: PassRef,
     name: String,
 }
 
@@ -37,7 +29,7 @@ impl ImageRef {
 }
 
 #[derive(Default)]
-struct Resources {
+pub struct Resources {
     buffers: Vec<BufferResource>,
     images: Vec<ImageResource>,
 }
@@ -98,77 +90,32 @@ impl<'a> IndexMut<&'a ImageRef> for Resources {
     }
 }
 
-enum RenderStage<'f, B> {
+pub enum RenderPass<'f, B> {
     Top,
-    RenderPass(Box<RenderPass<B> + 'f>),
+    Graphics(Box<GraphicsPass<B> + 'f>),
+    Compute(Box<ComputePass<B> + 'f>),
     Bottom,
     Invalid,
 }
 
-enum Dependency {
+pub enum Dependency {
     Buffer(BufferRef),
     Image(ImageRef, ImageLayout)
 }
 
 pub struct FrameGraph<'f, B: Backend> {
-    resources: Resources,
-    graph: Graph<RenderStage<'f, B>, Dependency, petgraph::Directed>,
-    top: PassRef,
-    bottom: PassRef,
+    pub(super) resources: Resources,
+    pub(super) graph: Graph<RenderPass<'f, B>, Dependency>,
+    pub(super) top: PassRef,
+    pub(super) bottom: PassRef,
 }
 
 impl<'f, B: Backend> FrameGraph<'f, B> {
-    /*
-    pub(crate) fn new(builder: FrameBuilder<'f, B>) -> FrameGraph<'f, B> {
-        let mut resources = Resources { 
-            buffers: Vec::new(),
-            images: Vec::new(),
-        };
-        let mut graph = Graph::with_capacity(builder.render_passes.len(), 0);
-
-        let top = graph.add_node(RenderStage::Top);
-        let pass_refs = Vec::new();
-        for pass in builder.render_passes {
-            pass_refs.push(graph.add_node(RenderStage::RenderPass(pass)));
-        }
-        let bottom = graph.add_node(RenderStage::Bottom);
-
-        for buffer in builder.resources.buffers {
-            let new_buffer = resources.add_buffer(BufferResource { info: buffer.info });
-            if let Some(ResourceCreator::Pass(p)) = buffer.data.creator {
-                for reader in buffer.readers {
-                    graph.add_edge(
-                        pass_refs[p], 
-                        pass_refs[reader], 
-                        Dependency::Buffer(new_buffer),
-                    );
-                }
-            }
-        }
-        for image in builder.resources.images {
-            let new_image = resources.add_image(ImageResource { info: image.info });
-            if let Some(ResourceCreator::Pass(p)) = image.data.creator {
-                for reader in image.readers.into_iter() {
-                    graph.add_edge(
-                        pass_refs[p], 
-                        pass_refs[reader.0], 
-                        Dependency::Image(new_image, reader.1),
-                    );
-                }
-            }
-        }
-
-        FrameGraph {
-            resources: resources,
-            graph: graph
-        }
-    }
-    */
 
     pub fn new() -> FrameGraph<'f, B> {
         let mut graph = Graph::default();
-        let top = PassRef(graph.add_node(RenderStage::Top));
-        let bottom = PassRef(graph.add_node(RenderStage::Bottom));
+        let top = PassRef(graph.add_node(RenderPass::Top));
+        let bottom = PassRef(graph.add_node(RenderPass::Bottom));
         FrameGraph {
             resources: Default::default(),
             graph: graph,
@@ -177,15 +124,58 @@ impl<'f, B: Backend> FrameGraph<'f, B> {
         }
     }
 
-    pub fn add_pass<D: RenderPassDef<B>>(&mut self, def: &D) -> D::Output {
-        let pass_ref = PassRef(self.graph.add_node(RenderStage::Invalid));
+    pub fn add_graphics_pass<D: GraphicsPassDef<B>>(&mut self, def: &D) -> D::Output {
+        let pass_ref = PassRef(self.graph.add_node(RenderPass::Invalid));
         let (output, pass) = {
             let mut builder = PassBuilder::new(pass_ref, self);
             def.setup_pass(&mut builder)
         };
-        self.graph[pass_ref.0] = RenderStage::RenderPass(pass);
+        self.graph[pass_ref.0] = RenderPass::Graphics(pass);
         output
     }
+
+    pub fn add_compute_pass<D: ComputePassDef<B>>(&mut self, def: &D) -> D::Output {
+        let pass_ref = PassRef(self.graph.add_node(RenderPass::Invalid));
+        let (output, pass) = {
+            let mut builder = PassBuilder::new(pass_ref, self);
+            def.setup_pass(&mut builder)
+        };
+        self.graph[pass_ref.0] = RenderPass::Compute(pass);
+        output
+    }
+
+    pub fn add_input_buffer(&mut self, name: &str, info: BufferInfo) -> BufferRef {
+        self.resources.add_buffer(BufferResource {
+            info: info,
+            creator: self.top,
+            name: name.to_string(),
+        })
+    }
+
+    pub fn add_input_image(&mut self, name: &str, info: ImageInfo) -> ImageRef {
+        self.resources.add_image(ImageResource {
+            info: info,
+            creator: self.top,
+            name: name.to_string(),
+        })
+    }
+
+    pub fn make_buffer_output(&mut self, buffer: BufferRef) {
+        self.graph.add_edge(
+            self.resources[&buffer].creator.0,
+            self.bottom.0,
+            Dependency::Buffer(buffer.clone())
+        );
+    }
+
+    pub fn make_image_output(&mut self, image: ImageRef, layout: ImageLayout) {
+        self.graph.add_edge(
+            self.resources[&image].creator.0,
+            self.bottom.0,
+            Dependency::Image(image.clone(), layout)
+        );
+    }
+
 }
 
 pub struct PassBuilder<'r, 'f: 'r, B: Backend> {
@@ -205,25 +195,21 @@ impl<'r, 'f, B: Backend> PassBuilder<'r, 'f, B> {
     pub fn create_buffer(&mut self, name: &str, info: BufferInfo) -> BufferRef {
         self.frame.resources.add_buffer(BufferResource {
             info: info,
-            lifetime: ResourceLifetime {
-                creator: self.pass,
-                consumer: None,
-            },
+            creator: self.pass,
             name: name.to_string(),
         })
     }
 
     pub fn read_buffer(&mut self, buffer: &BufferRef) {
         self.frame.graph.add_edge(
+            self.frame.resources[buffer].creator.0, 
             self.pass.0,
-            self.frame.resources[buffer].lifetime.creator.0, 
             Dependency::Buffer(buffer.clone())
         );
     }
 
     pub fn write_buffer(&mut self, buffer: BufferRef, new_name: &str) -> BufferRef {
         self.read_buffer(&buffer);
-        self.frame.resources.buffers[buffer.0].lifetime.consumer = Some(self.pass);
         let info = self.frame.resources.buffers[buffer.0].info;
         self.create_buffer(new_name, info)
     }
@@ -231,10 +217,7 @@ impl<'r, 'f, B: Backend> PassBuilder<'r, 'f, B> {
     pub fn create_image(&mut self, name: &str, info: ImageInfo) -> ImageRef {
         self.frame.resources.add_image(ImageResource {
             info: info,
-            lifetime: ResourceLifetime {
-                creator: self.pass,
-                consumer: None,
-            },
+            creator: self.pass,
             name: name.to_string()
         })
     }
@@ -242,14 +225,13 @@ impl<'r, 'f, B: Backend> PassBuilder<'r, 'f, B> {
     pub fn read_image(&mut self, image: &ImageRef, layout: ImageLayout) {
         self.frame.graph.add_edge(
             self.pass.0,
-            self.frame.resources[image].lifetime.creator.0, 
+            self.frame.resources[image].creator.0, 
             Dependency::Image(image.clone(), layout)
         );
     }
 
     pub fn write_image(&mut self, image: ImageRef, new_name: &str, layout: ImageLayout) -> ImageRef {
         self.read_image(&image, layout);
-        self.frame.resources.images[image.0].lifetime.consumer = Some(self.pass);
         let info = self.frame.resources.images[image.0].info;
         self.create_image(new_name, info)
     }
