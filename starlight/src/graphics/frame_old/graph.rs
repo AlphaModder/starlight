@@ -90,10 +90,46 @@ impl<'a> IndexMut<&'a ImageRef> for Resources {
     }
 }
 
-pub enum RenderPass<'f, B> {
+pub trait AnyPassOwned<C> {
+    fn new_ref<'a>(&'a self) -> Box<AnyPass<C> + 'a>;
+}
+
+impl<B: Backend, P: RenderPass<B>> AnyPassOwned<P::Context> for P {
+    fn new_ref<'a>(&'a self) -> Box<AnyPass<P::Context> + 'a> {
+        struct PackagedRenderPass<'a, B: Backend, P: RenderPass<B>> {
+            pass: &'a P,
+            resources: Option<P::Resources>,
+        }
+
+        impl<'a, B: Backend, P: RenderPass<B>> AnyPass<P::Context> for PackagedRenderPass<'a, B, P> {
+            fn acquire_resources(&mut self) {
+                if self.resources.is_none() {
+                    self.resources = Some(self.pass.acquire_resources());
+                }
+            }
+
+            fn execute_pass(&mut self, context: &mut P::Context) {
+                self.acquire_resources();
+                self.pass.execute_pass(context, &self.resources.unwrap());
+            }
+        }
+
+        Box::new(PackagedRenderPass {
+            pass: &self.pass,
+            resources: None
+        })
+    }
+}
+
+pub trait AnyPass<C> {
+    fn acquire_resources(&mut self);
+    fn execute_pass(&mut self, context: &mut C);
+}
+
+pub enum RenderPassNode<'f, B> {
     Top,
-    Graphics(Box<GraphicsPass<B> + 'f>),
-    Compute(Box<ComputePass<B> + 'f>),
+    Graphics(Box<AnyPassOwned<GraphicsContext<B>> + 'f>),
+    Compute(Box<AnyPassOwned<ComputeContext<B>> + 'f>),
     Bottom,
     Invalid,
 }
@@ -105,7 +141,7 @@ pub enum Dependency {
 
 pub struct FrameGraph<'f, B: Backend> {
     pub(super) resources: Resources,
-    pub(super) graph: Graph<RenderPass<'f, B>, Dependency>,
+    pub(super) graph: Graph<RenderPassNode<'f, B>, Dependency>,
     pub(super) top: PassRef,
     pub(super) bottom: PassRef,
 }
@@ -114,8 +150,8 @@ impl<'f, B: Backend> FrameGraph<'f, B> {
 
     pub fn new() -> FrameGraph<'f, B> {
         let mut graph = Graph::default();
-        let top = PassRef(graph.add_node(RenderPass::Top));
-        let bottom = PassRef(graph.add_node(RenderPass::Bottom));
+        let top = PassRef(graph.add_node(RenderPassNode::Top));
+        let bottom = PassRef(graph.add_node(RenderPassNode::Bottom));
         FrameGraph {
             resources: Default::default(),
             graph: graph,
@@ -124,6 +160,11 @@ impl<'f, B: Backend> FrameGraph<'f, B> {
         }
     }
 
+    pub fn build_graphics_pass(&mut self) -> PassBuilder<B> {
+        PassBuilder::new()
+    }
+
+    /*
     pub fn add_graphics_pass<D: GraphicsPassDef<B>>(&mut self, def: &D) -> D::Output {
         let pass_ref = PassRef(self.graph.add_node(RenderPass::Invalid));
         let (output, pass) = {
@@ -175,6 +216,8 @@ impl<'f, B: Backend> FrameGraph<'f, B> {
             Dependency::Image(image.clone(), layout)
         );
     }
+    */
+    
 
 }
 
@@ -234,5 +277,13 @@ impl<'r, 'f, B: Backend> PassBuilder<'r, 'f, B> {
         self.read_image(&image, layout);
         let info = self.frame.resources.images[image.0].info;
         self.create_image(new_name, info)
+    }
+
+    pub fn with_executor<G: GraphicsPass>(&mut self, executor: G) {
+
+    }
+
+    pub fn build(self) {
+
     }
 }

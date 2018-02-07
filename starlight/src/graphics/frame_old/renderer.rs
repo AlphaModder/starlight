@@ -1,30 +1,13 @@
-use super::graph::FrameGraph;
+use super::graph::{FrameGraph, AnyPass, PassRef, RenderPassNode};
+use super::context::*;
+
 use typemap;
 
 use gfx_hal::Backend;
 
 use std::ops::{Deref, DerefMut};
 use std::cell::RefCell;
-
-use self::traits::*;
-mod traits {
-    use gfx_hal::queue::QueueType;
-    use gfx_hal::queue::QueueType::*;
-    pub trait QueueTypeExt {
-        fn is_subtype(&self, q: &QueueType) -> bool;
-    }
-
-    impl QueueTypeExt for QueueType {
-        fn is_subtype(&self, q: &QueueType) -> bool {
-            match (*self, *q) {
-                (General, General) => false,
-                (General, _) => true,
-                (Graphics, Transfer) | (Compute, Transfer) => true,
-                _ => false,
-            }
-        }
-    }
-}
+use std::collections::HashMap;
 
 pub struct RenderContext<'d, B: Backend> {
     device: &'d B::Device,
@@ -67,17 +50,31 @@ pub struct FrameResources<B: Backend> {
 
 }
 
+enum PassStorage<'r, B> {
+    Graphics(Box<AnyPass<GraphicsContext<B>> + 'r>),
+    Compute(Box<AnyPass<ComputeContext<B>> + 'r>),
+}
+
 pub struct FrameRenderer<'r, B: Backend> {
-    graph: &'r FrameGraph<'r, B>,
     context: &'r RenderContext<'r, B>,
+    graph: &'r FrameGraph<'r, B>,
+    passes: HashMap<PassRef, PassStorage<'r, B>>,
     resources: FrameResourcesWrapper<'r, B>,
 }
 
 impl<'r, B: Backend> FrameRenderer<'r, B> {
-
     pub fn new<'g: 'r, 'c: 'r>(graph: &'r FrameGraph<'g, B>, context: &'r RenderContext<'c, B>) -> Self {
+        let passes = HashMap::from_iter(graph.node_references().filter_map(|(i, n)| {
+            match n {
+                RenderPassNode::Graphics(ref pass) => Some((PassRef(i), PassStorage::Graphics(pass.new_ref()))),
+                RenderPassNode::Compute(ref pass) => Some((PassRef(i), PassStorage::Compute(pass.new_ref()))),
+                _ => None,
+            }
+        }));
+
         FrameRenderer {
             graph: graph,
+            passes: passes,
             context: context,
             resources: FrameResourcesWrapper::new(graph, context),
         }

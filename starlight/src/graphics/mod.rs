@@ -5,6 +5,7 @@ use gfx_hal::{Device, Gpu, Adapter, Instance, QueueFamily, Surface};
 use graphics::backend::Backend;
 
 pub mod frame;
+pub mod frame_old;
 pub mod backend;
 
 pub struct Graphics<B: Backend> {

@@ -17,7 +17,8 @@ pub struct GBufferOutputs {
 }
 
 fn add_gbuffer_pass(graph: &mut FrameGraph) -> GBufferOutputs {
+    let 
     graph.add_graphics_pass(|builder| {
-        
+
     })
 }

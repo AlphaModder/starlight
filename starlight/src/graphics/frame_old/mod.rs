@@ -1,23 +1,15 @@
-use gfx_hal::Backend;
 use gfx_hal::{buffer, image, format};
+use gfx_hal::Backend;
 
-use std::marker::PhantomData;
-
+mod context;
 mod pass;
 mod graph;
 mod renderer;
 
-pub use self::pass::RenderPass;
-pub use self::graph::{FrameGraph, BufferResource, ImageResource, BufferRef, ImageRef};
-pub use self::renderer::*;
-
-pub struct GraphicsContext<B: Backend> {
-    phantom: PhantomData<B>,
-}
-
-pub struct ComputeContext<B: Backend> {
-    phantom: PhantomData<B>,
-}
+pub use self::context::*;
+pub use self::pass::*;
+pub use self::graph::{FrameGraph, BufferRef, ImageRef};
+pub use self::renderer::{FrameRenderer, RenderContext};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct BufferInfo {
@@ -49,3 +41,7 @@ pub enum ImageLayout {
     Attachment,
     Texture,
 }
+
+
+
+
