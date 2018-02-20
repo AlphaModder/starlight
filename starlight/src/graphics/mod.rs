@@ -1,11 +1,12 @@
 use winit;
 use gfx_hal;
 use gfx_hal::{format, window};
-use gfx_hal::{Device, Gpu, Adapter, Instance, QueueFamily, Surface};
+use gfx_hal::{Device, Adapter, Instance, Surface, QueueGroup};
+use gfx_hal::error::DeviceCreationError;
 use graphics::backend::Backend;
 
 pub mod frame;
-pub mod frame_old;
+// pub mod frame_old;
 pub mod backend;
 
 pub struct Graphics<B: Backend> {
@@ -14,7 +15,7 @@ pub struct Graphics<B: Backend> {
     surface_format: format::Format,
     swapchain: <B::GfxBackend as gfx_hal::Backend>::Swapchain,
     backbuffer: window::Backbuffer<B::GfxBackend>,
-    gpu: Gpu<B::GfxBackend>,
+    device: <B::GfxBackend as gfx_hal::Backend>::Device,
 }
 
 impl<B: Backend> Graphics<B> {
@@ -30,9 +31,9 @@ impl<B: Backend> Graphics<B> {
         };
 
         info!("Acquiring GPU...");
-        let (gpu, surface_format) = Self::acquire_gpu_and_surface_format(&backend)?;
+        let DeviceData { device, queue_group, surface_format } = Self::acquire_device_data(&backend)?;
         
-        let (mut swapchain, backbuffer) = gpu.device.create_swapchain(
+        let (mut swapchain, backbuffer) = device.create_swapchain(
             backend.get_surface_mut(),
             window::SwapchainConfig::new().with_color(surface_format),
         );
@@ -43,11 +44,11 @@ impl<B: Backend> Graphics<B> {
             surface_format: surface_format,
             swapchain: swapchain,
             backbuffer: backbuffer,
-            gpu: gpu,
+            device: device,
         })
     }
 
-    fn acquire_gpu_and_surface_format(backend: &B) -> Result<(Gpu<B::GfxBackend>, format::Format), GraphicsInitError<B>> {
+    fn acquire_device_data(backend: &B) -> Result<DeviceData<B>, GraphicsInitError<B>> {
         let mut adapters = backend.enumerate_adapters();
         let adapter = adapters.remove(0);
         debug!("Using adapter:");
@@ -63,28 +64,44 @@ impl<B: Backend> Graphics<B> {
 
         debug!("{:?}", surface_format);
 
-        Ok((adapter.open_with(|ref family| {
-            if family.supports_graphics() && backend.get_surface().supports_queue_family(family) {
-                Some(1)
-            } else { None }
-        }), surface_format))
+        let (device, queue_group) = adapter.open_with::<_, gfx_hal::Graphics>(1, |family| {
+            backend.get_surface().supports_queue_family(family)
+        })?;
+
+        Ok(DeviceData {
+            device: device, 
+            queue_group: queue_group, 
+            surface_format: surface_format
+        })
     }
 
     fn get_surface_format(adapter: &Adapter<B::GfxBackend>, surface: &Surface<B::GfxBackend>) -> Option<format::Format> {
-        surface
-            .capabilities_and_formats(&adapter.physical_device)
-            .1
-            .into_iter()
-            .find(|format| format.1 == format::ChannelType::Srgb)
+        surface.capabilities_and_formats(&adapter.physical_device).1.map(|formats| { 
+                formats.into_iter().find(|format| {
+                    format.base_format().1 == format::ChannelType::Srgb
+                }).unwrap()
+            }
+        )
     }
+}
+
+struct DeviceData<B: Backend> {
+    device: <B::GfxBackend as gfx_hal::Backend>::Device,
+    queue_group: QueueGroup<B::GfxBackend, gfx_hal::Graphics>,
+    surface_format: format::Format
 }
 
 #[derive(Debug)]
 pub enum GraphicsInitError<B: Backend> {
     WindowCreationFailed(B::WindowError),
+    DeviceCreationFailed(DeviceCreationError),
     NoCompatibleSurfaceFormat,
 }
 
-
+impl<B: Backend> From<DeviceCreationError> for GraphicsInitError<B> {
+    fn from(error: DeviceCreationError) -> GraphicsInitError<B> {
+        GraphicsInitError::DeviceCreationFailed(error)
+    }
+}
 
   

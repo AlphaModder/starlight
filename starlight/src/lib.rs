@@ -5,6 +5,7 @@ extern crate winit;
 extern crate petgraph;
 extern crate typemap;
 
+mod util;
 pub mod graphics;
 
 pub struct Engine<G: graphics::backend::Backend> {

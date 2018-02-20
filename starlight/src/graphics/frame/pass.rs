@@ -1,45 +1,31 @@
 use gfx_hal::Backend;
-use graphics::frame::renderer::Resources;
 
-pub trait RenderPass<B: Backend> {
-    type Context;
-    type Resources;
-    fn acquire_resources(&self) -> Self::Resources;
-    fn execute(&self, &mut Self::Context, resources: &Self::Resources);
+use std::marker::PhantomData;
+
+pub struct GraphicsContext<B: Backend> {
+    phantom: PhantomData<B>,
 }
 
-pub trait AnyPass<C> {
-    fn acquire_resources(&mut self);
-    fn execute_pass(&mut self, context: &mut C);
+pub trait GraphicsPass<B: Backend> {
+    fn execute(&self, context: &mut GraphicsContext<B>);
 }
 
-pub trait AnyPassOwned<C> {
-    fn mirror<'a>(&'a self) -> Box<AnyPass<C> + 'a>;
+impl<B: Backend, T> GraphicsPass<B> for T
+    where T: Fn(&mut GraphicsContext<B>)
+{
+    fn execute(&self, context: &mut GraphicsContext<B>) { self(context) }
 }
 
-impl<B: Backend, P: RenderPass<B>> AnyPassOwned<P::Context> for P {
-    fn mirror<'a>(&'a self) -> Box<AnyPass<P::Context> + 'a> {
-        struct PackagedRenderPass<'a, B: Backend, P: RenderPass<B>> {
-            pass: &'a P,
-            resources: Option<P::Resources>,
-        }
+pub struct ComputeContext<B: Backend> {
+    phantom: PhantomData<B>,
+}
 
-        impl<'a, B: Backend, P: RenderPass<B>> AnyPass<P::Context> for PackagedRenderPass<'a, B, P> {
-            fn acquire_resources(&mut self) {
-                if self.resources.is_none() {
-                    self.resources = Some(self.pass.acquire_resources());
-                }
-            }
+pub trait ComputePass<B: Backend> {
+    fn execute(&self, context: &mut ComputeContext<B>);
+}
 
-            fn execute_pass(&mut self, context: &mut P::Context) {
-                self.acquire_resources();
-                self.pass.execute_pass(context, &self.resources.unwrap());
-            }
-        }
-
-        Box::new(PackagedRenderPass {
-            pass: &self.pass,
-            resources: None
-        })
-    }
+impl<B: Backend, T> ComputePass<B> for T
+    where T: Fn(&mut ComputeContext<B>)
+{
+    fn execute(&self, context: &mut ComputeContext<B>) { self(context) }
 }

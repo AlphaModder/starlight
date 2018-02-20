@@ -10,8 +10,7 @@ extern crate gfx_backend_gl;
 use std::fmt::Debug;
 use gfx_hal;
 use gfx_hal::{Instance, Adapter};
-use gfx_hal::format;
-use gfx_hal::format::Formatted;
+use gfx_hal::format::{self, AsFormat};
 use winit;
 
 pub trait Backend: Sized {
@@ -73,7 +72,7 @@ impl Backend for GL {
     fn init(engine_name: &str, version: u32, window_builder: winit::WindowBuilder, events: &winit::EventsLoop) -> Result<Self, Self::WindowError> {
         let context_builder = gfx_backend_gl::config_context(
             gfx_backend_gl::glutin::ContextBuilder::new(),
-            format::Srgba8::SELF,
+            format::Rgba8Srgb::SELF,
             None,
         ).with_vsync(true);
         Ok(GL(gfx_backend_gl::Surface::from_window(

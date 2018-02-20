@@ -13,7 +13,7 @@ vulkan = ["gfx-backend-vulkan"]
 [dependencies]
 gfx-hal = { git = "https://github.com/gfx-rs/gfx", branch = "master" }
 log = "0.3"
-winit = "0.7"
+winit = "0.10"
 image = "0.15"
 petgraph = "0.4.11"
 typemap = "0.3.3"

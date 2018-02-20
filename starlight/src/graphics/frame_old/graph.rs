@@ -279,10 +279,6 @@ impl<'r, 'f, B: Backend> PassBuilder<'r, 'f, B> {
         self.create_image(new_name, info)
     }
 
-    pub fn with_executor<G: GraphicsPass>(&mut self, executor: G) {
-
-    }
-
     pub fn build(self) {
 
     }

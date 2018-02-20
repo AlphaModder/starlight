@@ -4,4 +4,4 @@ version = "0.1.0"
 authors = ["AlphaModder"]
 
 [dependencies]
-starlight = { path = "../starlight", version = "0.0.1" }
+starlight = { path = "../starlight" }
