@@ -17,6 +17,10 @@ winit = "0.10"
 image = "0.15"
 petgraph = "0.4.11"
 typemap = "0.3.3"
+futures = "^0.2.0-alpha"
+num_cpus = "1.0"
+deque = "0.3.2"
+rand = "0.4"
 
 [dependencies.gfx-backend-gl]
 git = "https://github.com/gfx-rs/gfx" 
