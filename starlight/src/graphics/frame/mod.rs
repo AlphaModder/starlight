@@ -1,8 +1,10 @@
 mod pass;
 mod graph;
+mod pipeline;
 
 pub use self::pass::*;
 pub use self::graph::*;
+
 pub use gfx_hal::{buffer, image, format};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]

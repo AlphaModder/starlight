@@ -31,6 +31,14 @@ impl<'r> GraphicsPassBuilder<'r> {
     pub fn create_image(&mut self, image: ImageInfo) -> ImageRef {
         unimplemented!()
     }
+
+    pub fn read_image(&mut self, image: &ImageRef) {
+
+    }
+
+    pub fn write_image(&mut self, image: ImageRef) -> ImageRef {
+        unimplemented!()
+    }
 }
 
 pub trait BuildComputePass<B: Backend> {

@@ -16,12 +16,12 @@ pub struct ImageResourceDef {
     name: String,
 }
 
-pub struct BufferRef(usize);
+pub struct BufferRef(pub(crate) usize);
 impl BufferRef {
     fn clone(&self) -> BufferRef { BufferRef(self.0) }
 }
 
-pub struct ImageRef(usize);
+pub struct ImageRef(pub(crate) usize);
 impl ImageRef {
     fn clone(&self) -> ImageRef { ImageRef(self.0) }
 }

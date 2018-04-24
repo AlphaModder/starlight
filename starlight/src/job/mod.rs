@@ -365,7 +365,7 @@ impl WorkStealingPoolBuilder {
     /// # Panics
     ///
     /// Panics if `pool_size == 0`.
-    pub fn create_foreground(&mut self) -> WorkStealingPool {
+    pub fn create_foreground<F: Future<Item=(), Error=Never> + Send + 'static>(&mut self, start: Option<F>) -> WorkStealingPool {
         assert!(self.pool_size > 0);
 
         let mut workers = Vec::new();
@@ -382,7 +382,7 @@ impl WorkStealingPoolBuilder {
             consumers.push(consumer);
         }
 
-        let pool = WorkStealingPool {
+        let mut pool = WorkStealingPool {
             inner: Arc::new(PoolInner {
                 stealers: stealers,
                 producers: producers,
@@ -390,10 +390,12 @@ impl WorkStealingPoolBuilder {
             })
         };
 
-        let mut id = 0;
-        for (worker, consumer) in workers.into_iter().zip(consumers.into_iter()) {
+        if let Some(start) = start {
+            pool.spawn(Box::new(start));
+        }
+
+        for (id, (worker, consumer)) in workers.into_iter().zip(consumers.into_iter()).enumerate() {
             WorkerThread::spawn(&pool.inner, id, id == self.pool_size - 1, worker, consumer, &self);
-            id += 1;
         }
         pool
     }

@@ -1,6 +1,8 @@
+use futures::prelude::*;
+
 use std::cell::UnsafeCell;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// This code shamelessly stolen from the incredible [lazy-init](https://github.com/khuey/lazy-init)
 pub struct MutableLazy<T> {
@@ -51,3 +53,4 @@ impl<T: Sync> MutableLazy<T> {
 }
 
 unsafe impl<T: Sync> Sync for MutableLazy<T> { }
+

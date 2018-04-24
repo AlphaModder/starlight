@@ -2,7 +2,7 @@ use gfx_hal::Backend;
 use graphics::frame::Resources;
 use graphics::frame::{GraphicsContext, ComputeContext};
 
-/*
+
 pub trait RenderPass<B: Backend> {
     type Context;
     type Resources;
@@ -45,4 +45,3 @@ impl<B: Backend, P: RenderPass<B>> AnyPassOwned<P::Context> for P {
         })
     }
 }
-*/

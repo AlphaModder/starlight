@@ -21,6 +21,7 @@ futures = "^0.2.0-alpha"
 num_cpus = "1.0"
 deque = "0.3.2"
 rand = "0.4"
+thread_local = "0.3"
 
 [dependencies.gfx-backend-gl]
 git = "https://github.com/gfx-rs/gfx" 

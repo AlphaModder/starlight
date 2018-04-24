@@ -2,16 +2,12 @@ use gfx_hal::Backend;
 use graphics::frame::pass::*;
 
 mod resources;
-mod renderer;
 mod build;
 
-use self::resources::*;
-
-pub use self::resources::{BufferRef, ImageRef};
-pub use self::renderer::*;
+pub use self::resources::*;
 pub use self::build::*;
 
-enum RenderPass<'p, B> {
+pub(crate) enum RenderPass<'p, B> {
     Top,
     Graphics(Box<GraphicsPass<B> + 'p>),
     Compute(Box<ComputePass<B> + 'p>),
@@ -54,5 +50,6 @@ impl<'p, B: Backend> FrameGraph<'p, B> {
         self.passes.push(RenderPass::Compute(Box::new(pass)));
         output
     }
+
 }
 
