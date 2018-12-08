@@ -8,4 +8,3 @@ edition = "2018"
 gfx-hal = { git = "https://github.com/gfx-rs/gfx" }
 gfx-backend-vulkan = { git = "https://github.com/gfx-rs/gfx" }
 daggy = "0.6"
-bitflags = "1.0"

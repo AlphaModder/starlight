@@ -9,13 +9,6 @@ pub struct BufferResource {
     pub usage: buffer::Usage,
 }
 
-bitflags! {
-    pub struct ImageAccessFlags: u16 {
-        const TRANSFER = 0x1;
-        const ATTACHMENT = 0x2;
-    }
-}
-
 pub enum ImageRead {
     Transfer,
     Attachment(AttachmentInfo),
