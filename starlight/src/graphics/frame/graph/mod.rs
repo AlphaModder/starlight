@@ -1,6 +1,8 @@
 use gfx_hal::Backend;
 use graphics::frame::pass::*;
 
+use std::ops::Deref;
+
 mod resources;
 mod build;
 
@@ -16,8 +18,8 @@ pub(crate) enum RenderPass<'p, B> {
 }
 
 pub struct FrameGraph<'p, B: Backend> {
-    passes: Vec<RenderPass<'p, B>>,
-    resources: Resources,
+    pub(crate) passes: Vec<RenderPass<'p, B>>,
+    pub(crate) resources: Resources,
 }
 
 impl<'p, B: Backend> Default for FrameGraph<'p, B> {
@@ -35,21 +37,29 @@ impl<'p, B: Backend> FrameGraph<'p, B> {
         Default::default()
     }
 
-    pub fn add_graphics_pass<T: BuildGraphicsPass<B>>(&mut self, build: T) -> T::Output
+    pub fn add_graphics_pass<T: BuildGraphicsPass<B>>(&mut self, build: T) -> Guard<T::Output>
         where T::Pass: 'p, 
     {
         let (output, pass) = build.build(&mut GraphicsPassBuilder::new(self));
         self.passes.push(RenderPass::Graphics(Box::new(pass)));
-        output
+        Guard(output)
     }
 
-    pub fn add_compute_pass<T: BuildComputePass<B>>(&mut self, build: T) -> T::Output 
+    pub fn add_compute_pass<T: BuildComputePass<B>>(&mut self, build: T) -> Guard<T::Output>
         where T::Pass: 'p,
     {
         let (output, pass) = build.build(&mut ComputePassBuilder::new(self));
         self.passes.push(RenderPass::Compute(Box::new(pass)));
-        output
+        Guard(output)
     }
 
 }
 
+pub struct Guard<T>(T);
+
+impl<T> Deref for Guard<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}

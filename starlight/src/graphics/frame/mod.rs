@@ -1,11 +1,15 @@
 mod pass;
 mod graph;
 mod pipeline;
+mod context;
 
 pub use self::pass::*;
 pub use self::graph::*;
+pub use self::context::*;
+pub use self::pipeline::{FramePump, /*PipelineStage,*/ GraphicsContext, ComputeContext};
 
 pub use gfx_hal::{buffer, image, format};
+
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct BufferInfo {

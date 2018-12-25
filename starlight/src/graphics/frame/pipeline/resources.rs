@@ -1,7 +1,7 @@
 use gfx_hal::Backend;
 
-use graphics::frame::graph::{self, BufferRef, ImageRef};
-use graphics::frame::pipeline::*;
+use graphics::frame::graph;
+use graphics::frame::{RenderContext, BufferRef, ImageRef};
 
 use util::MutableLazy;
 
@@ -14,9 +14,9 @@ pub struct ResourcesWrapper<'c, B: Backend> {
 }
 
 impl<'c, B: Backend> ResourcesWrapper<'c, B> {
-    pub fn new(template: &'c graph::Resources, context: &'c RenderContext<'c, B>) -> ResourcesWrapper<'c, B> {
+    pub fn new(context: &'c RenderContext<'c, B>) -> ResourcesWrapper<'c, B> {
         ResourcesWrapper { 
-            template: template, 
+            template: &context.graph.resources,
             context: context, 
             resources: MutableLazy::new()
         }
@@ -36,7 +36,8 @@ impl<'c, B: Backend> Deref for ResourcesWrapper<'c, B> {
 
 impl<'c, B: Backend> DerefMut for ResourcesWrapper<'c, B> {
     fn deref_mut(&mut self) -> &mut Resources<B> {
-        self.resources.get_mut(move || Resources::allocate(self.template))
+        let ResourcesWrapper { ref template, ref mut resources, .. } = self;
+        resources.get_mut(move || Resources::allocate(template))
     }
 }
 

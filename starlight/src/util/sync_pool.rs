@@ -41,7 +41,7 @@ impl<'a, T: 'a> Future for ResourceFuture<'a, T> {
             }
         }
         match self.pool.wakers.lock() {
-            Ok(wakers) => wakers.push_back(cx.waker().clone()),
+            Ok(mut wakers) => wakers.push_back(cx.waker().clone()),
             Err(_) => return Err(PoisonError::new(None)),
         }
         Ok(Async::Pending)

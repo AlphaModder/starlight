@@ -1,9 +1,10 @@
 use futures::prelude::*;
-use futures::future;
+use futures::stream;
 
 use graphics::frame::graph;
+use graphics::frame::{GraphicsPass, ComputePass, RenderContext};
 use graphics::frame::pipeline::*;
-use graphics::frame::pass::{GraphicsPass, ComputePass};
+use graphics::frame::pipeline::resources::ResourcesWrapper;
 
 use util;
 
@@ -18,102 +19,92 @@ use thread_local::ThreadLocal;
 
 use typemap;
 
+enum PassData<'c, B: Backend> {
+    Graphics {
+        pass: &'c GraphicsPass<B>,
+        queue: (&'c queue::QueueGroup<B, queue::Graphics>, usize),
+    },
+    Compute {
+        pass: &'c ComputePass<B>,
+        queue: (&'c queue::QueueGroup<B, queue::Compute>, usize)
+    }
+}
+
 pub struct RecordCommandBuffers<'c, B: Backend> {
-    context: &'c RenderContext<'c, B>,
-    passes: Vec<&'c graph::RenderPass<'c, B>>,
+    passes: Vec<PassData<'c, B>>,
     recorder: ParallelCommandRecorder<'c, B>,
+    resources: ResourcesWrapper<'c, B>,
 }
 
 impl<'c, B: Backend> RecordCommandBuffers<'c, B> {
-    fn reorder_passes(graph: &'c graph::FrameGraph<'c, B>) -> Vec<&'c graph::RenderPass<'c, B>> {
+    pub fn new(context: &'c RenderContext<'c, B>) -> Self {
+        let passes = Self::load_passes(context.graph);
+        RecordCommandBuffers {
+            recorder: ParallelCommandRecorder::new(context.device, pool::CommandPoolCreateFlags::empty(), passes.len()),
+            passes: passes,
+            resources: ResourcesWrapper::new(context),
+        }
+    }
+    
+    fn load_passes(graph: &'c graph::FrameGraph<'c, B>) -> Vec<PassData<'c, B>> {
         unimplemented!()
     }
 }
 
-impl<'c, B: Backend> PipelineStage<'c, B> for RecordCommandBuffers<'c, B> {
-    type Data = ();
+#[async_stream(item = SubmitWrapper<B>)]
+fn execute_stream<'a, B: Backend>(this: &'a RecordCommandBuffers<'a, B>) -> Result<(), ()> {
+    #[async]
+    for pass in stream::iter_ok(this.passes.iter()) {
+        stream_yield!(match pass {
+            PassData::Graphics { ref pass, queue: (ref queue, _) } => {
+                let mut pool = this.recorder.get_pool(queue);
+                let mut command_buffer = pool.acquire_command_buffer(false);
+                pass.draw(&mut GraphicsContext::new(&this.resources, &mut command_buffer));
+                command_buffer.finish().into()
+            }
+            PassData::Compute { ref pass, queue: (ref queue, _) } => {
+                let mut pool = this.recorder.get_pool(queue);
+                let mut command_buffer = pool.acquire_command_buffer(false);
+                pass.execute(&mut ComputeContext::new(&this.resources, &mut command_buffer));
+                command_buffer.finish().into()
+            }
+        });
+    }
+    Ok(())
+}
+
+impl<'c, B: Backend> PipelineStage for RecordCommandBuffers<'c, B> {
     type Input = ();
     type Output = Vec<SubmitWrapper<B>>;
     type Error = ();
 
-    fn new(context: &'c RenderContext<'c, B>, data: &()) -> Self {
-        let passes = Self::reorder_passes(context.graph);
-        RecordCommandBuffers {
-            context: context,
-            passes: passes,
-            recorder: ParallelCommandRecorder::new(context.device, pool::CommandPoolCreateFlags::empty(), passes.len()),
+    #[async(boxed)]
+    fn execute(&self, _: ()) -> Result<Self::Output, ()> {
+        let mut submits = Vec::new();
+        #[async]
+        for submit in execute_stream(self) {
+            submits.push(submit);
         }
-    }
-
-    fn execute<'a>(&'a mut self, input: ()) -> Box<Future<Item=Vec<SubmitWrapper<B>>, Error=()> + 'a> {
-        let recorder = &self.recorder;
-        Box::new(self.passes.iter().filter_map(move |pass| {
-            match **pass {
-                graph::RenderPass::Graphics(ref pass) => Some(RecordCommandBufferWrapper::Graphics(
-                    RecordCommandBuffer {
-                        record: &|command_buffer| {
-                            let context = GraphicsContextImpl::new(unimplemented!(), command_buffer);
-                            pass.draw(&mut context)
-                        },
-                        queue: unimplemented!(),
-                        recorder: recorder,
-                    }
-                )),
-                graph::RenderPass::Compute(ref pass) => Some(RecordCommandBufferWrapper::Compute(
-                    RecordCommandBuffer {
-                        record: &|command_buffer| {
-                            let context = ComputeContextImpl::new(unimplemented!(), command_buffer);
-                            pass.execute(&mut context)
-                        },
-                        queue: unimplemented!(),
-                        recorder: recorder,
-                    }
-                )),
-                _ => None,
-            }
-        }).collect::<future::JoinAll<_>>())
+        Ok(submits)
     }
 }
 
 type Submit<B, C> = command::Submit<B, C, command::OneShot, command::Primary>;
-
-enum RecordCommandBufferWrapper<'f, B: Backend> {
-    Graphics(RecordCommandBuffer<'f, B, queue::Graphics>),
-    Compute(RecordCommandBuffer<'f, B, queue::Compute>),
-}
 
 pub enum SubmitWrapper<B: Backend> {
     Graphics(Submit<B, queue::Graphics>),
     Compute(Submit<B, queue::Compute>),
 }
 
-impl<'f, B: Backend> Future for RecordCommandBufferWrapper<'f, B> {
-    type Item = SubmitWrapper<B>;
-    type Error = ();
-
-    fn poll(&mut self, context: &mut Context) -> Result<Async<Self::Item>, Self::Error> {
-        match *self {
-            RecordCommandBufferWrapper::Graphics(ref mut inner) => inner.poll(context).map(|a| a.map(|s| SubmitWrapper::Graphics(s))),
-            RecordCommandBufferWrapper::Compute(ref mut inner) => inner.poll(context).map(|a| a.map(|s| SubmitWrapper::Compute(s))),
-        }
+impl<B: Backend> From<Submit<B, queue::Graphics>> for SubmitWrapper<B> {
+    fn from(submit: Submit<B, queue::Graphics>) -> SubmitWrapper<B> {
+        SubmitWrapper::Graphics(submit)
     }
 }
 
-struct RecordCommandBuffer<'f, B: Backend, C: queue::Capability + 'f> {
-    record: &'f for<'b> Fn(&mut command::CommandBuffer<'b, B, C>),
-    queue: &'f queue::QueueGroup<B, C>,
-    recorder: &'f ParallelCommandRecorder<'f, B>
-}
-
-impl<'f, B: Backend, C: queue::Capability + 'f> Future for RecordCommandBuffer<'f, B, C> {
-    type Item = Submit<B, C>;
-    type Error = ();
-
-    fn poll(&mut self, context: &mut Context) -> Result<Async<Self::Item>, Self::Error> {
-        let mut pool = self.recorder.get_pool(self.queue);
-        let mut command_buffer = pool.acquire_command_buffer(false);
-        (self.record)(&mut command_buffer);
-        Ok(Async::Ready(command_buffer.finish()))
+impl<B: Backend> From<Submit<B, queue::Compute>> for SubmitWrapper<B> {
+    fn from(submit: Submit<B, queue::Compute>) -> SubmitWrapper<B> {
+        SubmitWrapper::Compute(submit)
     }
 }
 
@@ -134,7 +125,7 @@ impl<'c, B: Backend> ParallelCommandRecorder<'c, B> {
         }
     }
 
-    fn get_pool<'a, C: queue::Capability>(&'a self, queue_group: &queue::QueueGroup<B, C>) -> RefMut<'a, pool::CommandPool<B, C>> {
+    fn get_pool<'a, C: queue::Capability + 'static + Send>(&'a self, queue_group: &queue::QueueGroup<B, C>) -> RefMut<'a, pool::CommandPool<B, C>> {
         RefMut::map(
             self.pools.get_or(|| Box::new(RefCell::new(typemap::SendMap::custom()))).borrow_mut(),
             |map| {
@@ -148,7 +139,7 @@ impl<'c, B: Backend> ParallelCommandRecorder<'c, B> {
     }
 }
 
-struct _Capability<B: Backend, C>(PhantomData<(B, C)>);
-impl<B: Backend, C> typemap::Key for _Capability<B, C> {
+struct _Capability<B: Backend, C: 'static + Send>(PhantomData<(B, C)>);
+impl<B: Backend, C: 'static + Send> typemap::Key for _Capability<B, C> {
     type Value = HashMap<queue::QueueFamilyId, pool::CommandPool<B, C>>;
 }

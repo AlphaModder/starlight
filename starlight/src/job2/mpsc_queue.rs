@@ -18,19 +18,6 @@ use std::sync::Arc;
 use std::marker::PhantomData;
 use crossbeam_deque::Pop;
 
-/// A result of the `pop` function.
-pub enum PopResult<T> {
-    /// Some data has been popped
-    Data(T),
-    /// The queue is empty
-    Empty,
-    /// The queue is in an inconsistent state. Popping data should succeed, but
-    /// some pushers have yet to make enough progress in order allow a pop to
-    /// succeed. It is recommended that a pop() occur "in the near future" in
-    /// order to see if the sender has made progress or not
-    Inconsistent,
-}
-
 struct Node<T> {
     next: AtomicPtr<Node<T>>,
     value: Option<T>,

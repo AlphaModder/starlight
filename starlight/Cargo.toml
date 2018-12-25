@@ -13,13 +13,19 @@ vulkan = ["gfx-backend-vulkan"]
 [dependencies]
 gfx-hal = { git = "https://github.com/gfx-rs/gfx", branch = "master" }
 log = "0.3"
-winit = "0.10"
+winit = "0.13"
 image = "0.15"
+cgmath = "0.16.1"
 petgraph = "0.4.11"
 typemap = "0.3.3"
-futures = "^0.2.0-alpha"
+serde = "1.0"
+futures-core-preview = "0.2.3"
+futures-stable-preview = "0.2.3"
+futures-async-runtime-preview = "0.2.3"
+futures-preview = { version = "0.2.2", features = ["nightly"] }
 num_cpus = "1.0"
 deque = "0.3.2"
+crossbeam-deque = "0.6"
 rand = "0.4"
 thread_local = "0.3"
 

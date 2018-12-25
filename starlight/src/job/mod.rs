@@ -22,6 +22,7 @@ use std::thread;
 
 mod mpsc_queue;
 mod unpark_mutex;
+mod scheduler;
 
 use self::mpsc_queue::{self as mpsc, Producer, Consumer, PopResult};
 use self::unpark_mutex::UnparkMutex;

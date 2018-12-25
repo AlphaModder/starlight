@@ -1,0 +1,10 @@
+[package]
+name = "starlight-sandbox"
+version = "0.1.0"
+authors = ["AlphaModder <quasiflux@gmail.com>"]
+
+[dependencies]
+futures-core-preview = "0.2.3"
+futures-stable-preview = "0.2.3"
+futures-async-runtime-preview = "0.2.3"
+futures-preview = { version = "0.2.2", features = ["nightly"] }

@@ -6,89 +6,89 @@ extern crate gfx_backend_vulkan;
 extern crate gfx_backend_metal;
 #[cfg(feature = "gl")]
 extern crate gfx_backend_gl;
-
-use std::fmt::Debug;
 use gfx_hal;
-use gfx_hal::{Instance, Adapter};
+use gfx_hal::Adapter;
 use gfx_hal::format::{self, AsFormat};
 use winit;
 
-pub trait Backend: Sized {
-    type WindowError: Debug;
-    type GfxBackend: gfx_hal::Backend;
+pub trait Instance {
+    type Backend: gfx_hal::Backend;
+    type SurfaceError;
+    fn create(engine_name: &str, version: u32) -> Self;
+    fn create_surface(&self, window_builder: winit::WindowBuilder, events: &winit::EventsLoop) -> Result<<Self::Backend as gfx_hal::Backend>::Surface, Self::SurfaceError>;
+    fn enumerate_adapters(&self) -> Vec<Adapter<Self::Backend>>;
+}
 
-    fn init(engine_name: &str, version: u32, window_builder: winit::WindowBuilder, events: &winit::EventsLoop) -> Result<Self, Self::WindowError>;
-    fn get_surface(&self) -> &<Self::GfxBackend as gfx_hal::Backend>::Surface;
-    fn get_surface_mut(&mut self) -> &mut <Self::GfxBackend as gfx_hal::Backend>::Surface;
-    fn enumerate_adapters(&self) -> Vec<Adapter<Self::GfxBackend>>;
+pub trait Backend: gfx_hal::Backend {
+    type Instance: Instance<Backend=Self>;
 }
 
 macro_rules! impl_nongl_backend {
-    ($name:ident: $crate_name:ident) => {
-        pub struct $name($crate_name::Instance, winit::Window, <$crate_name::Backend as gfx_hal::Backend>::Surface);
-        impl Backend for $name {
-            type WindowError = winit::CreationError;
-            type GfxBackend = $crate_name::Backend;
-
-            fn init(engine_name: &str, version: u32, window_builder: winit::WindowBuilder, events: &winit::EventsLoop) -> Result<Self, Self::WindowError> {
-                let instance = $crate_name::Instance::create(engine_name, version);
-                let window = window_builder.build(&events)?;
-                let surface = instance.create_surface(&window);
-                Ok($name(instance, window, surface))
+    ($reexport_name:ident: $crate_name:ident) => {
+        impl Instance for $crate_name::Instance {
+            type Backend = $crate_name::Backend;
+            type SurfaceError = winit::CreationError;
+            fn create(engine_name: &str, version: u32) -> Self {
+                $crate_name::Instance::create(engine_name, version)
             }
 
-            fn get_surface(&self) -> &<Self::GfxBackend as gfx_hal::Backend>::Surface {
-                &self.2
+            fn create_surface(&self, window_builder: winit::WindowBuilder, events: &winit::EventsLoop) -> Result<<Self::Backend as gfx_hal::Backend>::Surface, Self::SurfaceError> {
+                Ok(self.create_surface(&window_builder.build(&events)?))
             }
 
-            fn get_surface_mut(&mut self) -> &mut <Self::GfxBackend as gfx_hal::Backend>::Surface {
-                &mut self.2
-            }
-
-            fn enumerate_adapters(&self) -> Vec<Adapter<Self::GfxBackend>> {
-                self.0.enumerate_adapters()
+            fn enumerate_adapters(&self) -> Vec<Adapter<Self::Backend>> {
+                <gfx_hal::Instance<Backend=Self::Backend>>::enumerate_adapters(self)
             }
         }
+
+        impl Backend for $crate_name::Backend {
+            type Instance = $crate_name::Instance;
+        }
+
+        pub type $reexport_name = $crate_name::Backend;
     }
 }
 
 #[cfg(all(feature = "dx12", target_os = "windows"))]
-impl_nongl_backend!(DX12: gfx_backend_dx12);
+impl_nongl_backend!(DX12Backend: gfx_backend_dx12);
 
 #[cfg(feature = "vulkan")]
-impl_nongl_backend!(Vulkan: gfx_backend_vulkan);
+impl_nongl_backend!(VulkanBackend: gfx_backend_vulkan);
 
 #[cfg(all(feature = "metal", target_os = "macos"))]
-impl_nongl_backend!(Metal: gfx_backend_metal);
+impl_nongl_backend!(MetalBackend: gfx_backend_metal);
 
 #[cfg(feature = "gl")]
-pub struct GL(<gfx_backend_gl::Backend as gfx_hal::Backend>::Surface);
+impl Instance for gfx_backend_gl::Headless {
+    type Backend = gfx_backend_gl::Backend;
+    type SurfaceError = gfx_backend_gl::glutin::CreationError;
+    fn create(engine_name: &str, version: u32) -> Self {
+        let context = gfx_backend_gl::glutin::HeadlessRendererBuilder::new(1, 1)
+            .build()
+            .expect("Failed to create headless context!");
+        gfx_backend_gl::Headless(context)
+    }
 
-#[cfg(feature = "gl")]
-impl Backend for GL {
-    type WindowError = gfx_backend_gl::glutin::CreationError;
-    type GfxBackend = gfx_backend_gl::Backend;
-
-    fn init(engine_name: &str, version: u32, window_builder: winit::WindowBuilder, events: &winit::EventsLoop) -> Result<Self, Self::WindowError> {
+    fn create_surface(&self, window_builder: winit::WindowBuilder, events: &winit::EventsLoop) -> Result<<Self::Backend as gfx_hal::Backend>::Surface, Self::SurfaceError> {
         let context_builder = gfx_backend_gl::config_context(
             gfx_backend_gl::glutin::ContextBuilder::new(),
             format::Rgba8Srgb::SELF,
             None,
         ).with_vsync(true);
-        Ok(GL(gfx_backend_gl::Surface::from_window(
+        Ok(gfx_backend_gl::Surface::from_window(
             gfx_backend_gl::glutin::GlWindow::new(window_builder, context_builder, &events)?
-        )))
+        ))
     }
 
-    fn get_surface(&self) -> &<Self::GfxBackend as gfx_hal::Backend>::Surface {
-        &self.0
-    }
-
-    fn get_surface_mut(&mut self) -> &mut <Self::GfxBackend as gfx_hal::Backend>::Surface {
-        &mut self.0
-    }
-
-    fn enumerate_adapters(&self) -> Vec<Adapter<Self::GfxBackend>> {
-        self.0.enumerate_adapters()
+    fn enumerate_adapters(&self) -> Vec<Adapter<Self::Backend>> {
+        <gfx_hal::Instance<Backend=Self::Backend>>::enumerate_adapters(self)
     }
 }
+
+#[cfg(feature = "gl")]
+impl Backend for gfx_backend_gl::Backend {
+    type Instance = gfx_backend_gl::Headless;
+}
+
+#[cfg(feature = "gl")]
+pub type GLBackend = gfx_backend_gl::Backend;

@@ -9,13 +9,14 @@ pub mod frame;
 // pub mod frame_old;
 pub mod backend;
 
+/*
 pub struct Graphics<B: Backend> {
     backend: B,
     window_events: winit::EventsLoop,
     surface_format: format::Format,
-    swapchain: <B::GfxBackend as gfx_hal::Backend>::Swapchain,
-    backbuffer: window::Backbuffer<B::GfxBackend>,
-    device: <B::GfxBackend as gfx_hal::Backend>::Device,
+    swapchain: B::Swapchain,
+    backbuffer: window::Backbuffer<B>,
+    device: B::Device,
 }
 
 impl<B: Backend> Graphics<B> {
@@ -103,5 +104,4 @@ impl<B: Backend> From<DeviceCreationError> for GraphicsInitError<B> {
         GraphicsInitError::DeviceCreationFailed(error)
     }
 }
-
-  
+*/

@@ -1,91 +1,67 @@
 use futures::prelude::*;
-use futures::task::Context;
+use futures::prelude::{async, await};
 
-use gfx_hal::Backend;
+use std::boxed::PinBox;
 
-use graphics::frame::graph;
-use util::ResourcePool;
-
-mod record;
-mod resources;
 mod context;
+mod record;
+mod pump;
 
-use self::context::*;
+pub(crate) mod resources;
 
-pub use self::resources::*;
+pub use self::context::*;
 pub use self::record::*;
-pub use self::context::{GraphicsContext, ComputeContext};
+pub use self::pump::*;
 
-pub struct RenderContext<'c, B: Backend> {
-    graph: &'c graph::FrameGraph<'c, B>,
-    device: &'c B::Device,
-}
-
-pub trait PipelineStage<'c, B: Backend> {
-    type Data;
+pub trait PipelineStage {
     type Input;
     type Output;
     type Error;
 
-    fn new(graph: &'c RenderContext<'c, B>, data: &Self::Data) -> Self;
-
-    fn execute<'a>(&'a mut self, input: Self::Input) -> Box<Future<Item = Self::Output, Error = Self::Error> + 'a>;
+    fn execute<'a>(&'a self, input: Self::Input) -> PinBox<Future<Item = Self::Output, Error = Self::Error> + 'a>;
 }
 
-pub struct FrameFuture<'f, O, E>(Box<Future<Item=O, Error=E> + 'f>);
+impl<T: PipelineStage + ?Sized> PipelineStage for Box<T> {
+    type Input = T::Input;
+    type Output = T::Output;
+    type Error = T::Error;
 
-impl<'f, O, E> Future for FrameFuture<'f, O, E> {
-    type Item = O;
-    type Error = E;
-
-    fn poll(&mut self, context: &mut Context) -> Result<Async<Self::Item>, Self::Error> {
-        self.0.poll(context)
+    fn execute<'a>(&'a self, input: Self::Input) -> PinBox<Future<Item = Self::Output, Error = Self::Error> + 'a> {
+        (self as &T).execute(input)
     }
 }
 
-pub struct FramePump<'c, B: Backend, I: 'c, O: 'c, E: 'c> {
-    context: &'c RenderContext<'c, B>,
-    future_builder: Box<Fn(I) -> Box<Future<Item=O, Error=E> + 'c> +'c>,
-    max_frames: Option<usize>,
+pub struct ChainStage<S1: PipelineStage, S2: PipelineStage<Input=S1::Output>>(S1, S2) where S2::Error: Into<S1::Error>;
+
+impl<S1, S2> PipelineStage for ChainStage<S1, S2> 
+    where S1: PipelineStage, S2: PipelineStage<Input=S1::Output>, S2::Error: Into<S1::Error> 
+{
+    type Input = S1::Input;
+    type Output = S2::Output;
+    type Error = S1::Error;
+
+    #[async(boxed)]
+    fn execute(&self, input: Self::Input) -> Result<Self::Output, Self::Error> {
+        await!(self.1.execute(await!(self.0.execute(input))?)).map_err(Into::into)
+    }
 }
 
-impl<'c, B: Backend, I: 'c, O: 'c, E: 'c> FramePump<'c, B, I, O, E> {
-    pub fn new<S>(context: &'c RenderContext<'c, B>, max_frames: Option<usize>, data: S::Data, count: usize) -> FramePump<'c, B, I, O, E> 
-        where S: PipelineStage<'c, B, Input=I, Output=O, Error=E> + 'c
+pub struct FramePump<S: PipelineStage>(S);
+
+impl<S: PipelineStage> FramePump<S> {
+    pub fn new(stage: S) -> FramePump<S> 
     {
-        let pool = ResourcePool::new(count.min(max_frames.unwrap_or(count)), || S::new(context, &data));
-        FramePump {
-            context: context,
-            future_builder: Box::new(|input| {
-                Box::new(pool.acquire().map_err(|e| panic!("Failed to acquire stage.")).and_then(|stage| stage.execute(input)))
-            }),
-            max_frames: max_frames,
-        }
+        FramePump(stage)
     }
 
-    pub fn add_stage<S>(self, data: S::Data, count: usize) -> FramePump<'c, B, I, S::Output, E> 
-        where S: PipelineStage<'c, B, Input=O> + 'c, S::Error: Into<E>
+    pub fn add_stage<S2>(self, s: S2) -> FramePump<ChainStage<S, S2>>
+        where S2: PipelineStage<Input=S::Output>, S2::Error: Into<S::Error>
     {
-        let pool = ResourcePool::new(count.min(self.max_frames.unwrap_or(count)), || S::new(self.context, &data));
-        FramePump {
-            context: self.context,
-            max_frames: self.max_frames,
-            future_builder: Box::new(move |input| {
-                Box::new(
-                    (self.future_builder)(input).and_then(
-                        |output| {
-                            pool.acquire()
-                                .map_err(|e| panic!("Failed to acquire stage."))
-                                .and_then(|stage| stage.execute(output))
-                                .map_err(Into::into)
-                        }
-                    )
-                )
-            }),
-        }
+        FramePump(ChainStage(self.0, s))
     }
 
-    pub fn start_frame(&self, input: I) -> FrameFuture<O, E> {
-        FrameFuture((self.future_builder)(input))
+    pub fn run(&mut self, start: S::Input, max_delay: usize) {
+        let frames = [];
+        
     }
 }
